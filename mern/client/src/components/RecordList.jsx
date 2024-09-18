@@ -36,20 +36,22 @@ const Record = (props) => (
 );
 
 export default function RecordList() {
-  const [records, setRecords] = useState([]);
-  const [previewData, setPreviewData] = useState([]);
-  const [excelData, setExcelData] = useState([]);
-  const [uploadStatus, setUploadStatus] = useState("");
-  const [filter, setFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRecords, setSelectedRecords] = useState([]);
-  const [selectAll, setSelectAll] = useState(false);
+  const [records, setRecords] = useState([]);   // Contains DB data
+  const [previewData, setPreviewData] = useState([]);   // Holds the preview data
+  const [excelData, setExcelData] = useState([]);   // Holds the excel data
+  const [filter, setFilter] = useState("");   // Used to filter out levels
+  const [searchTerm, setSearchTerm] = useState("");    // Used to search for names/positions
+  const [selectedRecords, setSelectedRecords] = useState([]);   // Contains selected rows in the db
+  const [selectAll, setSelectAll] = useState(false);    // Bool for check all boxes
 
+  // The hook is modified so searches in the DB returns through a filter
   useEffect(() => {
     async function getRecords() {
       const response = await fetch(`http://localhost:5050/record?level=${filter}`);
+      
+      // Error catch
       if (!response.ok) {
-        console.error("An error occurred:", response.statusText);
+        console.error("Error:", response.statusText);
         return;
       }
       const records = await response.json();
@@ -58,6 +60,9 @@ export default function RecordList() {
     getRecords();
   }, [filter]);
 
+
+
+  // Ignore caps when filtering
   const filteredRecords = records.filter((record) => {
     return (
       record.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -65,38 +70,65 @@ export default function RecordList() {
     );
   });
 
+
+
+  // Select individual check boxes for the table
   const toggleSelectRecord = (id) => {
-    setSelectedRecords((prevSelected) =>
-      prevSelected.includes(id)
-        ? prevSelected.filter((recordId) => recordId !== id)
-        : [...prevSelected, id]
-    );
+    setSelectedRecords((prevSelected) => {
+
+      // If row ID exists in selectedRecords, remove it
+      if (prevSelected.includes(id)) {
+        return prevSelected.filter(
+          (recordId) => recordId !== id
+        );
+      
+      // If not, add it  
+      } else {
+        return [...prevSelected, id];
+      }
+    });
   };
 
+
+
+  // Select all rows at once
   const toggleSelectAll = () => {
     if (selectAll) {
       setSelectedRecords([]);
     } else {
-      setSelectedRecords(filteredRecords.map((record) => record._id));
+      setSelectedRecords(filteredRecords.map(
+        (record) => record._id)
+      );
     }
     setSelectAll(!selectAll);
   };
 
+
+
+  // Delete selected rows
   const handleDeleteSelected = async () => {
+
+    // Loop through and delete from the database
     for (let id of selectedRecords) {
       await fetch(`http://localhost:5050/record/${id}`, {
         method: "DELETE",
       });
     }
+
+    // Reset variables to remove deleted data
     setRecords(records.filter((record) => !selectedRecords.includes(record._id)));
     setSelectedRecords([]);
     setSelectAll(false);
   };
 
+
+
+  // Handle Excel file upload and extract data
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     const reader = new FileReader();
 
+    // Parsing through file
     reader.onload = (e) => {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
@@ -104,20 +136,22 @@ export default function RecordList() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      setPreviewData(jsonData.slice(0, 10));
-      setExcelData(jsonData);
+      setPreviewData(jsonData.slice(0, 10));    // Preview first 10 rows
+      setExcelData(jsonData);   // Store the excel data
     };
-
     reader.readAsArrayBuffer(file);
   };
 
-  const handleUploadData = async () => {
-    setUploadStatus("Uploading...");
 
+
+  // Sequentially uploads the rows from the excel file
+  const handleUploadData = async () => {
     try {
       const promises = [];
 
+      // Loop through each row in the excel file
       for (let row of excelData) {
+        // Post to the db
         promises.push(
           fetch("http://localhost:5050/record/", {
             method: "POST",
@@ -127,8 +161,10 @@ export default function RecordList() {
             body: JSON.stringify(row),
           })
             .then((response) => {
+
+              // Error handling
               if (!response.ok) {
-                throw new Error("Upload failed");
+                throw new Error("Error");
               }
               return response.json();
             })
@@ -139,13 +175,14 @@ export default function RecordList() {
         );
       }
 
+      // An experimental line to see if uploads run more efficiently
+      // (Most likely has no effect at all)
       await Promise.all(promises);
-      setUploadStatus("Success: All data uploaded");
     } catch (error) {
-      setUploadStatus("Error: Failed to upload some or all data");
       console.error("Upload Error:", error);
     }
   };
+
 
 
   // This method will delete a record
@@ -156,7 +193,6 @@ export default function RecordList() {
     const newRecords = records.filter((el) => el._id !== id);
     setRecords(newRecords);
   }
-
 
 
 
@@ -172,10 +208,13 @@ export default function RecordList() {
     ));
   };
 
+
+
   return (
     <>
       <h3 className="text-lg font-semibold p-4">Employee Records</h3>
 
+      {/* Search bar function */}
       <input
         type="text"
         value={searchTerm}
@@ -184,6 +223,7 @@ export default function RecordList() {
         className="p-2 border border-gray-300 rounded mb-4"
       />
 
+      {/* Filtering function */}
       <div>
         <label>Filter by Level:</label>
         <select value={filter} onChange={(event) => setFilter(event.target.value)}>
@@ -194,6 +234,7 @@ export default function RecordList() {
         </select>
       </div>
 
+      {/* Deleting selected rows */}
       <div className="my-4">
         <button
           className="px-4 py-2 bg-red-500 text-white rounded"
@@ -210,6 +251,8 @@ export default function RecordList() {
             <thead>
               <tr className="border-b">
                 <th className="h-12 px-4">
+
+                  {/* Select all rows */}
                   <input
                     type="checkbox"
                     checked={selectAll}
@@ -227,8 +270,7 @@ export default function RecordList() {
         </div>
       </div>
 
-      <div>{uploadStatus}</div>
-
+      {/* Excel file upload */}
       <form
         onSubmit={handleFileUpload}
         className="border rounded-lg overflow-hidden p-4"
@@ -245,6 +287,8 @@ export default function RecordList() {
                   ))}
               </tr>
             </thead>
+
+            {/* Preview of the excel data */}
             <tbody>
               {previewData.map((row, index) => (
                 <tr key={index}>
@@ -256,7 +300,8 @@ export default function RecordList() {
             </tbody>
           </table>
         </div>
-
+        
+        {/* Upload button */}
         <button
           type="submit"
           className="block flex-1 bg-blue-500 text-white py-1.5 pl-1 rounded sm:text-sm"
